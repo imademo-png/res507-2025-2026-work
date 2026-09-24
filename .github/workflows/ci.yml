@@ -1,0 +1,14 @@
+name: CI Preview
+
+on:
+  push:
+
+jobs:
+  preview:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Run preview script
+        run: ./scripts/ci-preview.sh
