@@ -1,16 +1,10 @@
-name: CI
+cat >> .github/workflows/ci.yml << 'EOF'
 
-on:
-  push:
-  pull_request:
-
-permissions:
-  contents: read
-
-jobs:
-  build:
+  database:
     runs-on: ubuntu-latest
-    timeout-minutes: 5
+    timeout-minutes: 8
+    env:
+      COMPOSE: docker compose -f labs/20-containerized-node-app/docker/compose.ci.yaml
     steps:
       - name: Check out repository
         uses: actions/checkout@v7
@@ -20,43 +14,64 @@ jobs:
         with:
           node-version: "24"
 
-      - name: Install dependencies
-        working-directory: labs/20-containerized-node-app/app
-        run: npm ci
-
-      - name: Check JavaScript syntax
-        working-directory: labs/20-containerized-node-app/app
-        run: |
-          node --check app.js
-          node --check server.js
-
       - name: Build Docker image
         working-directory: labs/20-containerized-node-app
         run: docker build -t quote-app -f docker/Dockerfile .
 
-      - name: Run container smoke test
+      - name: Start PostgreSQL and app
+        run: $COMPOSE up -d --wait --wait-timeout 90
+
+      - name: Wait for app
         run: |
-          docker run -d --name quote-app -p 3000:3000 quote-app
           for attempt in $(seq 1 30); do
-            if curl --fail --silent --show-error \
-              --connect-timeout 1 --max-time 2 \
-              http://localhost:3000/health -o /tmp/quote-app-health.json \
-              && node -e 'const assert = require("node:assert/strict"); const fs = require("node:fs"); assert.equal(JSON.parse(fs.readFileSync("/tmp/quote-app-health.json", "utf8")).ok, true);'; then
-              echo "Health check passed"
-              exit 0
+            if curl --fail --silent --connect-timeout 1 --max-time 2 http://localhost:3000/health; then
+              echo "App ready"; exit 0
             fi
             sleep 1
           done
-          echo "Health check failed"
-          exit 1
+          echo "App not ready"; exit 1
 
-      - name: Show container diagnostics
+      - name: Check seeded quote, insert and read back
+        run: |
+          # vérifie qu'un texte (échappé comme Handlebars) est dans la page
+          contains() {
+            node -e '
+              const fs = require("fs");
+              const map = {"&":"&amp;","<":"&lt;",">":"&gt;","\"":"&quot;","\x27":"&#x27;","`":"&#x60;","=":"&#x3D;"};
+              const esc = s => s.replace(/[&<>"\x27`=]/g, c => map[c]);
+              const html = fs.readFileSync(process.argv[1], "utf8");
+              if (!html.includes(esc(process.argv[2]))) {
+                console.error("Quote absente de la page : " + process.argv[2]);
+                process.exit(1);
+              }' "$1" "$2"
+          }
+
+          # 1) une quote seedée par init.sql doit être affichée
+          SEEDED=$($COMPOSE exec -T db psql -U postgres -d postgres -tAc "SELECT text FROM quotes LIMIT 1")
+          test -n "$SEEDED" || { echo "Aucune quote seedée en base"; exit 1; }
+          curl --fail --silent --show-error http://localhost:3000/ -o /tmp/page1.html
+          contains /tmp/page1.html "$SEEDED"
+          echo "Seeded quote OK: $SEEDED"
+
+          # 2) insérer une quote unique
+          NEW="ci-quote-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
+          curl --fail --silent --show-error -o /dev/null \
+            --data-urlencode "author=CI" --data-urlencode "text=$NEW" \
+            http://localhost:3000/quotes
+
+          # 3) elle doit apparaître à la requête suivante
+          curl --fail --silent --show-error http://localhost:3000/ -o /tmp/page2.html
+          contains /tmp/page2.html "$NEW"
+          echo "Inserted quote OK: $NEW"
+
+      - name: Show logs on failure
         if: failure()
         run: |
-          docker ps -a
-          docker inspect quote-app || true
-          docker logs quote-app || true
+          $COMPOSE ps -a || true
+          $COMPOSE logs app || true
+          $COMPOSE logs db || true
 
-      - name: Stop container
+      - name: Clean up
         if: always()
-        run: docker rm -f quote-app || true
+        run: $COMPOSE down -v || true
+EOF

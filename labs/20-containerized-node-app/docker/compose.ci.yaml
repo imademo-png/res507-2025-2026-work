@@ -1,0 +1,25 @@
+services:
+  db:
+    image: postgres:18
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    volumes:
+      - ../db/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    healthcheck:
+      # -h 127.0.0.1 : force le TCP, donc "healthy" seulement après init.sql
+      test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -U postgres -d postgres"]
+      interval: 2s
+      timeout: 3s
+      retries: 30
+
+  app:
+    image: quote-app
+    environment:
+      DATABASE_URL: postgres://postgres:postgres@db:5432/postgres
+    ports:
+      - "3000:3000"
+    depends_on:
+      db:
+        condition: service_healthy
