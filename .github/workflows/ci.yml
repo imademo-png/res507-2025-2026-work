@@ -1,5 +1,81 @@
+name: CI
+
+on:
+  push:
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  fast-checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Install dependencies
+        working-directory: labs/20-containerized-node-app/app
+        run: npm ci
+
+      - name: Check JavaScript syntax
+        working-directory: labs/20-containerized-node-app/app
+        run: |
+          node --check app.js
+          node --check server.js
+
+  container:
+    needs: fast-checks
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v7
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v7
+        with:
+          node-version: "24"
+
+      - name: Build Docker image
+        working-directory: labs/20-containerized-node-app
+        run: docker build -t quote-app -f docker/Dockerfile .
+
+      - name: Run container smoke test
+        run: |
+          docker run -d --name quote-app -p 3000:3000 quote-app
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error \
+              --connect-timeout 1 --max-time 2 \
+              http://localhost:3000/health -o /tmp/quote-app-health.json \
+              && node -e 'const assert = require("node:assert/strict"); const fs = require("node:fs"); assert.equal(JSON.parse(fs.readFileSync("/tmp/quote-app-health.json", "utf8")).ok, true);'; then
+              echo "Health check passed"
+              exit 0
+            fi
+            sleep 1
+          done
+          echo "Health check failed"
+          exit 1
+
+      - name: Show container diagnostics
+        if: failure()
+        run: |
+          docker ps -a
+          docker inspect quote-app || true
+          docker logs quote-app || true
+
+      - name: Stop container
+        if: always()
+        run: docker rm -f quote-app || true
 
   database:
+    needs: fast-checks
     runs-on: ubuntu-latest
     timeout-minutes: 8
     env:
@@ -32,7 +108,6 @@
 
       - name: Check seeded quote, insert and read back
         run: |
-          # vérifie qu'un texte (échappé comme Handlebars) est dans la page
           contains() {
             node -e '
               const fs = require("fs");
@@ -45,20 +120,17 @@
               }' "$1" "$2"
           }
 
-          # 1) une quote seedée par init.sql doit être affichée
           SEEDED=$($COMPOSE exec -T db psql -U postgres -d postgres -tAc "SELECT text FROM quotes LIMIT 1")
           test -n "$SEEDED" || { echo "Aucune quote seedée en base"; exit 1; }
           curl --fail --silent --show-error http://localhost:3000/ -o /tmp/page1.html
           contains /tmp/page1.html "$SEEDED"
           echo "Seeded quote OK: $SEEDED"
 
-          # 2) insérer une quote unique
           NEW="ci-quote-${GITHUB_RUN_ID}-${GITHUB_RUN_ATTEMPT}"
           curl --fail --silent --show-error -o /dev/null \
             --data-urlencode "author=CI" --data-urlencode "text=$NEW" \
             http://localhost:3000/quotes
 
-          # 3) elle doit apparaître à la requête suivante
           curl --fail --silent --show-error http://localhost:3000/ -o /tmp/page2.html
           contains /tmp/page2.html "$NEW"
           echo "Inserted quote OK: $NEW"
