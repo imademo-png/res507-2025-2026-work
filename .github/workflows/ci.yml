@@ -145,4 +145,3 @@ jobs:
       - name: Clean up
         if: always()
         run: $COMPOSE down -v || true
-EOF
