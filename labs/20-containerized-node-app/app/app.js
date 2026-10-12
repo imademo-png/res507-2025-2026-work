@@ -24,7 +24,7 @@ export async function buildApp() {
   // Get all quotes endpoint
   app.get("/", async (_req, reply) => {
     /******* TODO SELECT quotes from DB ******/
-    const result = await app.pg.query('SELECT * FROM quote')
+    const result = await app.pg.query('SELECT * FROM quotes')
     const quotes = result.rows;
 
     return reply.view("index.hbs", { quotes });
