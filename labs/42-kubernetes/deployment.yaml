@@ -1,0 +1,34 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quote-app
+spec:
+  replicas: 3
+  selector:
+    matchLabels:
+      app: quote-app
+  template:
+    metadata:
+      labels:
+        app: quote-app
+    spec:
+      containers:
+        - name: quote-app
+          image: quote-app:local
+          imagePullPolicy: IfNotPresent
+          ports:
+            - containerPort: 3000
+          readinessProbe:
+            httpGet:
+              path: /health
+              port: 3000
+            initialDelaySeconds: 3
+            periodSeconds: 5
+          resources:
+            requests:
+              cpu: 100m
+              memory: 128Mi
+            limits:
+              cpu: 250m
+              memory: 256Mi  
+

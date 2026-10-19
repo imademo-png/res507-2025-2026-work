@@ -1,0 +1,12 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: too-big
+spec:
+  containers:
+    - name: too-big
+      image: quote-app:local
+      imagePullPolicy: IfNotPresent
+      resources:
+        requests:
+          cpu: "50"

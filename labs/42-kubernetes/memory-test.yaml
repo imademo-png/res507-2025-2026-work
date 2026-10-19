@@ -1,0 +1,24 @@
+apiVersion: v1
+kind: Pod
+metadata:
+  name: memory-test
+spec:
+  containers:
+    - name: memory-test
+      image: node:24-trixie-slim
+      command:
+        - node
+        - -e
+        - |
+          const keep = [];
+          setInterval(() => {
+            keep.push(Buffer.alloc(10 * 1024 * 1024, 1));
+            console.log(keep.length * 10 + " MiB allocated");
+          }, 200);
+      resources:
+        requests:
+          cpu: 50m
+          memory: 64Mi
+        limits:
+          cpu: 250m
+          memory: 128Mi
