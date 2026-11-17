@@ -1,0 +1,69 @@
+apiVersion: v1
+kind: PersistentVolumeClaim
+metadata:
+  name: quote-db-data
+spec:
+  accessModes:
+    - ReadWriteOnce
+  storageClassName: local-path
+  resources:
+    requests:
+      storage: 1Gi
+---
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: quote-db
+spec:
+  replicas: 1
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      app: quote-db
+  template:
+    metadata:
+      labels:
+        app: quote-db
+    spec:
+      containers:
+        - name: postgres
+          image: postgres:18
+          envFrom:
+            - secretRef:
+                name: quote-db-secret
+          ports:
+            - containerPort: 5432
+          readinessProbe:
+            exec:
+              command:
+                - sh
+                - -c
+                - pg_isready -h 127.0.0.1 -U "$POSTGRES_USER" -d "$POSTGRES_DB"
+            initialDelaySeconds: 5
+            periodSeconds: 5
+          volumeMounts:
+            - name: data
+              mountPath: /var/lib/postgresql
+            - name: init
+              mountPath: /docker-entrypoint-initdb.d
+              readOnly: true
+      volumes:
+        - name: data
+          persistentVolumeClaim:
+            claimName: quote-db-data
+        - name: init
+          configMap:
+            name: quote-db-init
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: quote-db
+spec:
+  selector:
+    app: quote-db
+  ports:
+    - port: 5432
+      targetPort: 5432
+  type: ClusterIP

@@ -14,8 +14,14 @@ spec:
     spec:
       containers:
         - name: quote-app
-          image: quote-app:local
+          image: quote-app:v4
           imagePullPolicy: IfNotPresent
+          env:
+            - name: DATABASE_URL
+              valueFrom:
+                secretKeyRef:
+                  name: quote-db-secret
+                  key: DATABASE_URL
           ports:
             - containerPort: 3000
           readinessProbe:
@@ -30,5 +36,4 @@ spec:
               memory: 128Mi
             limits:
               cpu: 250m
-              memory: 256Mi  
-
+              memory: 256Mi
