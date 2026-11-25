@@ -3,45 +3,37 @@
 ## Lab 42
 Résultats core + extension resources : [../42-kubernetes/verification.md](../42-kubernetes/verification.md)
 
-k3s avait disparu de la VM en début de session : réinstallé (TODO `k3s --version`), image réimportée, manifests du Lab 42 réappliqués.
-
+VM réinitialisée le 25/11 : k3s réinstallé (`v1.37.2+k3s1`), Docker installé pour builder `quote-app:v4`, image importée dans k3s, Secret recréé et tous les manifests réappliqués.
 ## Base de données
 
 PVC :
-```
-TODO : sortie de kubectl get pvc quote-db-data (STATUS Bound)
-```
+
+NAME            STATUS   VOLUME                                     CAPACITY   ACCESS MODES   STORAGECLASS
+quote-db-data   Bound    pvc-74245f96-1801-485b-a855-bdc647bbf5c4   1Gi        RWO            local-path
 
 Connexion app → DB : `DATABASE_URL` injecté depuis le Secret `quote-db-secret` (`secretKeyRef`). Aucune valeur de Secret dans Git.
 
 Handlers SELECT/INSERT complétés dans `labs/20-containerized-node-app/app/app.js`, image reconstruite en `quote-app:v4` et importée dans k3s (nouveau tag, sinon le Deployment ne change pas).
 
-Insertion via l'app (marker `res509-1794909938`), puis remplacement du Pod Postgres :
+Insertion via l'app (marker `res509-1795643539`), relu avant remplacement :
 ```
---- AVANT
-quote-db-57d9b444f4-h4d9x   1/1   Running   0   53m
-deployment.apps/quote-db restarted
-deployment "quote-db" successfully rolled out
---- APRES
-quote-db-7d48685b84-c7nt5   1/1   Running   0   12s
+$ curl -s http://127.0.0.1:8080/ | grep -F res509-1795643539
+    <div>res509-1795643539</div>
+quote-db-668f85c69d-7zszf   1/1   Running   0   42s
 ```
 
-En base, sur le nouveau Pod :
+Remplacement du Pod Postgres (même PVC) :
 ```
- id | author |               text
-  4 | RES509 | res509-1794909938
-  3 | devops | If it hurts, do it more often.
-  2 | linus  | Talk is cheap. Show me the code.
+deployment.apps/quote-db restarted
+deployment "quote-db" successfully rolled out
+quote-db-7549bc99cf-kjprj   1/1   Running   0   7s
 ```
 
 Relu via l'app après remplacement :
 ```
-$ curl -s http://127.0.0.1:8080/ | grep -F res509-1794909938
-    <div>res509-1794909938</div>
+$ curl -s http://127.0.0.1:8080/ | grep -F res509-1795643539
+    <div>res509-1795643539</div>
 ```
-
-→ Nouveau Pod, même donnée : elle est stockée sur le PVC (`/var/lib/postgresql`), pas dans le container.
-
 ## Schéma
 
 ```mermaid
