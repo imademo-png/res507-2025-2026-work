@@ -118,8 +118,12 @@ memory-test   1/1     Running            1 (1s ago)    5s
 memory-test   0/1     OOMKilled          1 (4s ago)    8s
 memory-test   0/1     CrashLoopBackOff   1 (11s ago)   19s
 
-lastState.terminated: TODO (OOMKilled 137)
-logs --previous: TODO (dernières lignes "XX MiB allocated")
+
+lastState.terminated: "exitCode":137, "reason":"OOMKilled", "startedAt":"2026-11-25T22:07:29Z", "finishedAt":"2026-11-25T22:07:32Z"
+logs --previous: non récupérables (le container redémarre trop vite)
+
+Limits sur un Pod live :
+{"limits":{"cpu":"250m","memory":"256Mi"},"requests":{"cpu":"100m","memory":"128Mi"}}
 ```
 Pendant le test, les 3 Pods `quote-app` restent 1/1 avec 0 restart.
 
